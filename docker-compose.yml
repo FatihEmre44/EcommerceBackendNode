@@ -1,0 +1,32 @@
+version: '3.8'
+services:
+  api:
+    build: .
+    container_name: backend-app
+    ports:
+      - "5000:5000"
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/eticaret
+      - REDIS_URL=redis://redis:6379  # Burayı düzelttim (REDIS_HOST yerine URL formatı daha kolay)
+    depends_on:
+      - mongo
+      - redis
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    command: npm run dev   # <--- İŞTE EKSİK OLAN PARÇA BU!
+
+  mongo:
+    image: mongo:latest
+    container_name: db-mongo
+    volumes:
+      - mongo-data:/data/db
+
+  redis:
+    image: redis:alpine
+    container_name: cache-redis
+    ports:
+      - "6379:6379"
+
+volumes:
+  mongo-data:
