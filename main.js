@@ -1,7 +1,12 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const dotenv = require('dotenv');
 const { createClient } = require('redis');
+const connectDB = require('./database/db'); // 1. Dosyayı çağır
 
+dotenv.config();
+
+connectDB(); // 2. Bağlantıyı başlat
 const app = express();
 const PORT = process.env.PORT || 5000;
 
