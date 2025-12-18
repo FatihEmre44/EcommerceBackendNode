@@ -1,52 +1,33 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const dotenv = require('dotenv');
-const { createClient } = require('redis');
-const connectDB = require('./database/db'); // 1. Dosyayı çağır
+const connectDB = require('./database/db'); // Veritabanı bağlantı dosyamız
 
+// --- KONFİGÜRASYON ---
 dotenv.config();
 
-connectDB(); // 2. Bağlantıyı başlat
+// 1. Veritabanına Bağlan (Tek satır yeterli, içi db.js'de dolu)
+connectDB(); 
+
+// 2. Redis Bağlantısını Başlat
+// Bu satır config/redis.js dosyasını çalıştırır ve bağlantıyı kurar.
+require('./config/redis')
+
 const app = express();
-const PORT = process.env.PORT || 5000;
+app.use(express.json()); // JSON verilerini okumak için şart
 
-app.use(express.json());
 
-// --- 1. REDIS BAĞLANTISI (YAML'dan gelen adresi kullan) ---
-// process.env.REDIS_URL yoksa varsayılan olarak 'redis://redis:6379' kullan
-const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
 
-const redisClient = createClient({
-    url: redisUrl
-});
 
-redisClient.on('error', (err) => console.log('❌ Redis Hatası:', err));
-
-(async () => {
-    try {
-        await redisClient.connect();
-        console.log('✅ Redis bağlantısı başarılı!');
-    } catch (error) {
-        console.log('❌ Redis bağlantı hatası:', error);
-    }
-})();
-
-// --- 2. MONGODB BAĞLANTISI (YAML'dan gelen adresi kullan) ---
-// process.env.MONGO_URI yoksa varsayılanı kullan
-const mongoURI = process.env.MONGO_URI || 'mongodb://mongo:27017/eticaret';
-
-mongoose.connect(mongoURI)
-    .then(() => console.log('✅ MongoDB bağlantısı başarılı!'))
-    .catch(err => console.log('❌ MongoDB Hatası:', err));
-
-// --- ROTALAR ---
+// --- TEST ROTASI (Opsiyonel - Sunucu ayakta mı?) ---
 app.get('/', (req, res) => {
     res.send({ 
-        message: 'E-Ticaret Backend  12345(Hot Reload Aktif!) 🔥', 
+        message: 'E-Ticaret API Çalışıyor! 🚀', 
         time: new Date().toISOString()
     });
 });
 
+const PORT = process.env.PORT || 5000;
+
 app.listen(PORT, () => {
-    console.log(`🚀 Sunucu123 ${PORT} portunda çalışıyor...`);
+    console.log(`🚀 Sunucu ${PORT} portunda başarıyla çalışıyor...`);
 });
