@@ -9,7 +9,6 @@ const ProductSchema = new mongoose.Schema({
     trim: true,
     maxlength: [100, 'Ürün adı 100 karakteri geçemez']
   },
-  // URL Dostu İsim (Örn: "iphone-15-pro-max")
   slug: {
     type: String,
     unique: true
@@ -20,19 +19,26 @@ const ProductSchema = new mongoose.Schema({
     maxlength: [2000, 'Açıklama 2000 karakteri geçemez']
   },
   
+  // --- YENİ EKLENEN: STOK KODU (SKU) ---
+  sku: {
+    type: String,
+    unique: true,
+    default: function() {
+        // Otomatik SKU üretimi: PRO-170123456789-55
+        return 'PRO-' + Date.now() + '-' + Math.floor(Math.random() * 100);
+    }
+  },
+
   // 2. Fiyatlandırma
   price: {
     type: Number,
     required: [true, 'Lütfen fiyatı giriniz'],
     min: [0, 'Fiyat 0 dan küçük olamaz']
   },
-  // İndirimli Fiyat (Opsiyonel)
   discountPrice: {
     type: Number,
     validate: {
-      // Özel Validasyon: İndirimli fiyat, normal fiyattan BÜYÜK olamaz.
       validator: function(value) {
-        // 'this.price'a erişebilmek için arrow function kullanmıyoruz.
         return value < this.price; 
       },
       message: 'İndirimli fiyat, normal fiyattan büyük veya eşit olamaz'
@@ -41,18 +47,26 @@ const ProductSchema = new mongoose.Schema({
 
   // 3. Kategorizasyon
   category: {
-    type: String,
-    required: [true, 'Lütfen bir kategori giriniz'],
-    // Burayı projenin ihtiyaçlarına göre genişletebilirsin
-    enum: {
-      values: ['Elektronik', 'Giyim', 'Kitap', 'Ev & Yaşam', 'Kozmetik', 'Spor', 'Diğer'],
-      message: 'Lütfen geçerli bir kategori seçiniz'
-    }
+    type: mongoose.Schema.ObjectId,
+    ref: 'Category',
+    required: [true, 'Lütfen bir kategori seçiniz']
   },
   brand: {
     type: String,
     trim: true
   },
+  // --- YENİ EKLENEN: ETİKETLER ---
+  // Arama ve öneriler için (Örn: ["yazlık", "indirim", "oyun"])
+  tags: [String],
+
+  // --- YENİ EKLENEN: TEKNİK ÖZELLİKLER ---
+  // Filtreleme yaparken hayat kurtarır (Ram: 16GB, Renk: Mavi vb.)
+  specifications: [
+    {
+      key: { type: String, required: true },
+      value: { type: String, required: true }
+    }
+  ],
 
   // 4. Stok ve Envanter
   stock: {
@@ -61,27 +75,17 @@ const ProductSchema = new mongoose.Schema({
     min: [0, 'Stok 0 dan küçük olamaz'],
     default: 0
   },
-  sold: {
-    type: Number,
-    default: 0 // Çok satanları listelemek için sayaç
-  },
+  sold: { type: Number, default: 0 },
 
-  // 5. Görseller (Dizi Halinde)
-  // Cloudinary gibi bir servis kullanacağız, o yüzden public_id tutuyoruz.
+  // 5. Görseller
   images: [
     {
-      public_id: {
-        type: String,
-        required: true
-      },
-      url: {
-        type: String,
-        required: true
-      }
+      public_id: { type: String, required: true },
+      url: { type: String, required: true }
     }
   ],
 
-  // 6. İlişkiler (REFERANSLAR) 🔥
+  // 6. İlişkiler
   store: {
     type: mongoose.Schema.ObjectId,
     ref: 'Store',
@@ -93,37 +97,61 @@ const ProductSchema = new mongoose.Schema({
     required: true
   },
 
-  // 7. Değerlendirme Sistemi
-  rating: {
-    type: Number,
-    default: 0
-  },
-  numReviews: {
-    type: Number,
-    default: 0
-  },
+  // 7. Değerlendirme
+  rating: { type: Number, default: 0 },
+  numReviews: { type: Number, default: 0 },
   
-  createdAt: {
-    type: Date,
-    default: Date.now
-  }
+  // 8. Durumlar
+  isDeleted: { type: Boolean, default: false },
+  // Admin onayı veya Satıcının ürünü geçici kapatması için
+  isActive: { type: Boolean, default: true },
+
+  createdAt: { type: Date, default: Date.now }
 });
 
+// --- İNDEKSLEME (PERFORMANS İÇİN KRİTİK) ---
+// İsim, açıklama ve markada hızlı arama yapılmasını sağlar
+ProductSchema.index({ name: 'text', description: 'text', brand: 'text', tags: 'text' });
+
 // --- SLUG OLUŞTURMA ---
-// Kaydetmeden önce ismi URL formatına çevir
 ProductSchema.pre('save', function(next) {
   if (!this.isModified('name')) {
     next();
   }
-
   this.slug = this.name
     .toLowerCase()
-    .replace(/ /g, '-') // Boşlukları tire yap
-    .replace(/[^\w-]+/g, '') // Özel karakterleri sil
-    // Benzersiz olması için sonuna rastgele sayı ekleyelim (Opsiyonel ama önerilir)
+    .replace(/ /g, '-') 
+    .replace(/[^\w-]+/g, '') 
     + '-' + Math.floor(Math.random() * 1000);
-
   next();
 });
+
+// --- GÜNCELLEME METODU ---
+ProductSchema.methods.updateProductDetails = async function(data) {
+  if (data.name) this.name = data.name;
+  if (data.description) this.description = data.description;
+  if (data.category) this.category = data.category;
+  if (data.brand) this.brand = data.brand;
+  
+  // Sayısal kontroller
+  if (data.price !== undefined) this.price = data.price;
+  if (data.stock !== undefined) this.stock = data.stock;
+  if (data.discountPrice !== undefined) this.discountPrice = data.discountPrice;
+  
+  if (data.images) this.images = data.images;
+  
+  // Yeni eklenen alanların güncellemesi
+  if (data.tags) this.tags = data.tags;
+  if (data.specifications) this.specifications = data.specifications;
+  if (data.isActive !== undefined) this.isActive = data.isActive;
+
+  return await this.save();
+};
+
+ProductSchema.methods.softDelete = async function() {
+  this.isDeleted = true;
+  this.isActive = false; // Silinen ürün aktif de olamaz
+  return await this.save();
+};
 
 module.exports = mongoose.model('Product', ProductSchema);
